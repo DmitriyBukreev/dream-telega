@@ -1,0 +1,8 @@
+*.pch
+*.EXPERIMENTAL-checkpatch-fixes
+*.sublime-project
+*.sublime-workspace
+client/obj/
+client/bin/
+server/obj/
+server/bin/
