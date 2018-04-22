@@ -2,6 +2,7 @@ SRC = $(wildcard src/*.c)
 OBJ = $(SRC:src/%.c=obj/%.o)
 CFLAGS = -fsanitize=address -include src/precompiled.h -c
 LDFLAGS = -fsanitize=address -o
+LIBS = -lpanel -lmenu -lncurses
 
 all: dirs dt-client
 
@@ -12,7 +13,7 @@ clean:
 	rm -rf obj precompiled.h.pch
 
 dt-client: precompiled.h.pch $(OBJ)
-	gcc $(LDFLAGS) bin/$@ $(OBJ)
+	gcc $(LDFLAGS) bin/$@ $(OBJ) $(LIBS)
 	#------------------------------------------
 
 $(OBJ): obj/%.o: src/%.c
