@@ -24,15 +24,26 @@ do { \
 	} \
 } while (0)
 
+#define DEBUG_MSG(message) \
+syslog(LOG_INFO, "[DEBUG] %s", message)
+
 typedef struct wnd_type {
 	WINDOW *box;
 	WINDOW *content;
 	PANEL *panel;
 } wnd_instance;
 
-wnd_instance *draw_window(int y, int x, int height, int width, char *label);
+typedef struct  tui_type {
+	wnd_instance* msg_wnd;
+	wnd_instance* input_wnd;
+	wnd_instance* users_wnd;
+} tui_instance;
 
-void draw_interface(void);
+tui_instance *make_interface(void);
+
+void free_interface(tui_instance *tui);
+
+int input_handler(tui_instance **tui);
 
 void init_curses(void);
 
