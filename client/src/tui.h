@@ -5,6 +5,7 @@
 #define E_NOWINDOW 305
 
 #define C_WINDOW 1
+#define C_SELECT 2
 
 #define HDL_ERR_LOGGED(statement, error, message, code) \
 do { \
@@ -44,6 +45,8 @@ tui_instance *make_interface(void);
 void free_interface(tui_instance *tui);
 
 int input_handler(tui_instance **tui);
+
+int msg_handler(tui_instance **tui);
 
 void init_curses(void);
 

@@ -67,8 +67,10 @@ void free_interface(tui_instance *tui)
 {
 	if (tui == NULL)
 		return;
-	if (tui->msg_wnd != NULL)
+	if (tui->msg_wnd != NULL) {
+		delwin((WINDOW *)panel_userptr(tui->msg_wnd->panel));
 		free_window(tui->msg_wnd);
+	}
 	if (tui->users_wnd != NULL)
 		free_window(tui->users_wnd);
 	if (tui->input_wnd)
@@ -76,10 +78,12 @@ void free_interface(tui_instance *tui)
 	free(tui);
 }
 
+#define PADROWS 1024
 tui_instance *make_interface(void)
 {
 	// Structure to return
 	tui_instance *res_tui;
+	WINDOW *msg_pad;
 
 	res_tui = malloc(sizeof(tui_instance));
 	if (res_tui == NULL)
@@ -111,13 +115,50 @@ tui_instance *make_interface(void)
 
 	res_tui->input_wnd = make_window(horizontal_sep+1, 0,
 		scr_max_y-horizontal_sep-1, scr_max_x, "Input");
-
 	if (res_tui->input_wnd == NULL) {
 		free_interface(res_tui);
 		return NULL;
 	}
 
+	// Adding pad to msg_wnd
+	msg_pad = newpad(PADROWS, vertical_sep-2);
+	wbkgd(msg_pad, COLOR_PAIR(C_WINDOW));
+	wmove(msg_pad, PADROWS-horizontal_sep+1, 0);
+	scrollok(msg_pad, TRUE);
+	set_panel_userptr(res_tui->msg_wnd->panel, msg_pad);
+	if (msg_pad == NULL) {
+		free_interface(res_tui);
+		return NULL;
+	}
+
 	return res_tui;
+}
+
+void set_label(wnd_instance *wnd, char *label, int attrs)
+{
+	box(wnd->box, 0, 0);
+	wattron(wnd->box, attrs);
+	mvwaddstr(wnd->box, 0, 2, label);
+	wattroff(wnd->box, attrs);
+	wrefresh(wnd->box);
+}
+
+void print_msg(tui_instance *tui, char *msg)
+{
+	WINDOW *pad = (WINDOW *)panel_userptr(tui->msg_wnd->panel);
+	int beg_x, beg_y;
+	int max_x, max_y;
+
+	getbegyx(tui->msg_wnd->content, beg_y, beg_x);
+	getmaxyx(tui->msg_wnd->content, max_y, max_x);
+	max_x += beg_x;
+	max_y += beg_y-1;
+
+	// TODO: fancy printing to msg_wnd
+	HDL_ERR_LOGGED(waddstr(pad, msg),
+		ERR, "waddstr() failed", ERR);
+
+	prefresh(pad, PADROWS-max_y, 0, beg_y, beg_x, max_y, max_x);
 }
 
 // Moves cursor within the textbox
@@ -174,6 +215,10 @@ int input_handler(tui_instance **tui)
 	// Length of the message
 	int len = 0;
 
+	// Making window look like an active
+	set_label((*tui)->input_wnd, "Input", COLOR_PAIR(C_SELECT));
+
+	// Processing of keys
 	buf[0] = 0;
 	while ((key = wgetch(textbox)) != ERR) {
 		switch (key) {
@@ -183,10 +228,13 @@ int input_handler(tui_instance **tui)
 		// Not implemented
 			break;
 
-		case KEY_STAB:
+		case '\t':
 		case KEY_F(12):
 			// Launching next handler
 			// or exiting
+			werase(textbox);
+			set_label((*tui)->input_wnd, "Input",
+				COLOR_PAIR(C_WINDOW));
 			return key;
 
 		case KEY_RESIZE:
@@ -225,13 +273,9 @@ int input_handler(tui_instance **tui)
 			buf[len] = '\n';
 			buf[len+1] = 0;
 
-			// TODO: fancy printing to msg_wnd
-			HDL_ERR_LOGGED(waddstr((*tui)->msg_wnd->content, buf),
-				ERR, "waddstr() failed", ERR);
-			HDL_ERR_LOGGED(wrefresh((*tui)->msg_wnd->content),
-				ERR, "wrefresh() failed", ERR);
-			HDL_ERR_LOGGED(werase(textbox), ERR,
-				"werase() failed", ERR);
+			print_msg(*tui, buf);
+			HDL_ERR_LOGGED(werase(textbox),
+				ERR, "werase() failed", ERR);
 
 			len = 0;
 			buf_pos = 0;
@@ -259,6 +303,25 @@ int input_handler(tui_instance **tui)
 			}
 		}
 	}
+	return -ERR;
+}
+
+int msg_handler(tui_instance **tui)
+{
+	WINDOW *messages = (*tui)->msg_wnd->content;
+	int key;
+
+	set_label((*tui)->msg_wnd, "Messages", COLOR_PAIR(C_SELECT));
+	wrefresh(messages);
+	while ((key = wgetch(messages)) != ERR) {
+		switch (key) {
+		case '\t':
+		case KEY_F(12):
+			set_label((*tui)->msg_wnd, "Messages",
+				COLOR_PAIR(C_WINDOW));
+			return key;
+		}
+	}
 }
 
 void init_curses(void)
@@ -278,4 +341,5 @@ void init_curses(void)
 	HDL_ERR_LOGGED(start_color(), ERR,
 		"The color table cannot be allocated", ERR);
 	init_pair(C_WINDOW, COLOR_BLACK, COLOR_WHITE);
+	init_pair(C_SELECT, COLOR_WHITE, COLOR_BLACK);
 }
