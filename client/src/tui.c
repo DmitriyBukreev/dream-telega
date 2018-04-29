@@ -143,7 +143,7 @@ void set_label(wnd_instance *wnd, char *label, int attrs)
 	wrefresh(wnd->box);
 }
 
-void print_msg(tui_instance *tui, char *msg)
+void pad_refresh(tui_instance *tui)
 {
 	WINDOW *pad = (WINDOW *)panel_userptr(tui->msg_wnd->panel);
 	int beg_x, beg_y;
@@ -154,11 +154,18 @@ void print_msg(tui_instance *tui, char *msg)
 	max_x += beg_x;
 	max_y += beg_y-1;
 
+	prefresh(pad, PADROWS-max_y, 0, beg_y, beg_x, max_y, max_x);
+}
+
+void print_msg(tui_instance *tui, char *msg)
+{
+	WINDOW *pad = (WINDOW *)panel_userptr(tui->msg_wnd->panel);
+
 	// TODO: fancy printing to msg_wnd
 	HDL_ERR_LOGGED(waddstr(pad, msg),
 		ERR, "waddstr() failed", ERR);
 
-	prefresh(pad, PADROWS-max_y, 0, beg_y, beg_x, max_y, max_x);
+	pad_refresh(tui);
 }
 
 // Moves cursor within the textbox
@@ -201,6 +208,18 @@ int tboxmove(WINDOW *tbox, const char *buf, char dir, int *pos, const int max)
 	return x;
 }
 
+void redraw_interface(tui_instance **tui)
+{
+	// Re-entering curses mode
+	endwin();
+	refresh();
+	// Removing old interface
+	clear();
+	free_interface(*tui);
+	// Making new one
+	*tui = make_interface();
+}
+
 #define IN_BUF_SIZE 256
 int input_handler(tui_instance **tui)
 {
@@ -217,6 +236,8 @@ int input_handler(tui_instance **tui)
 
 	// Making window look like an active
 	set_label((*tui)->input_wnd, "Input", COLOR_PAIR(C_SELECT));
+	// Making cursor visible
+	curs_set(1);
 
 	// Processing of keys
 	buf[0] = 0;
@@ -230,25 +251,24 @@ int input_handler(tui_instance **tui)
 
 		case '\t':
 		case KEY_F(12):
-			// Launching next handler
-			// or exiting
+			curs_set(0);
 			werase(textbox);
 			set_label((*tui)->input_wnd, "Input",
 				COLOR_PAIR(C_WINDOW));
+			// Launching next handler
+			// or exiting
 			return key;
 
 		case KEY_RESIZE:
-			// Redrawing interface
-			endwin();
-			refresh();
-			clear();
-			free_interface(*tui);
-			// Updating pointers
-			*tui = make_interface();
+			redraw_interface(tui);
+			// Updating pointer to textbox
 			textbox = (*tui)->input_wnd->content;
-			// Restoring buffer to textbox
+			// Reprinting buffer to textbox
 			buf[len] = 0;
 			waddstr(textbox, buf);
+			// Restoring label attributes
+			set_label((*tui)->input_wnd, "Input",
+				COLOR_PAIR(C_SELECT));
 			break;
 
 		case KEY_BACKSPACE:
@@ -308,18 +328,24 @@ int input_handler(tui_instance **tui)
 
 int msg_handler(tui_instance **tui)
 {
-	WINDOW *messages = (*tui)->msg_wnd->content;
+	WINDOW *messages = (WINDOW *)panel_userptr((*tui)->msg_wnd->panel);
 	int key;
 
 	set_label((*tui)->msg_wnd, "Messages", COLOR_PAIR(C_SELECT));
-	wrefresh(messages);
+	pad_refresh(*tui);
 	while ((key = wgetch(messages)) != ERR) {
 		switch (key) {
 		case '\t':
 		case KEY_F(12):
 			set_label((*tui)->msg_wnd, "Messages",
 				COLOR_PAIR(C_WINDOW));
+			pad_refresh(*tui);
 			return key;
+		case KEY_RESIZE:
+			redraw_interface(tui);
+			set_label((*tui)->msg_wnd, "Messages",
+				COLOR_PAIR(C_SELECT));
+			break;
 		}
 	}
 }
