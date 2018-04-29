@@ -122,9 +122,11 @@ tui_instance *make_interface(void)
 
 	// Adding pad to msg_wnd
 	msg_pad = newpad(PADROWS, vertical_sep-2);
+	// Initial settings of pad
 	wbkgd(msg_pad, COLOR_PAIR(C_WINDOW));
 	wmove(msg_pad, PADROWS-horizontal_sep+1, 0);
 	scrollok(msg_pad, TRUE);
+	keypad(msg_pad, TRUE);
 	set_panel_userptr(res_tui->msg_wnd->panel, msg_pad);
 	if (msg_pad == NULL) {
 		free_interface(res_tui);
@@ -323,14 +325,16 @@ int input_handler(tui_instance **tui)
 			}
 		}
 	}
-	return -ERR;
+	return key;
 }
 
 int msg_handler(tui_instance **tui)
 {
 	WINDOW *messages = (WINDOW *)panel_userptr((*tui)->msg_wnd->panel);
 	int key;
+	int position;
 
+	position = 0;
 	set_label((*tui)->msg_wnd, "Messages", COLOR_PAIR(C_SELECT));
 	pad_refresh(*tui);
 	while ((key = wgetch(messages)) != ERR) {
@@ -339,6 +343,8 @@ int msg_handler(tui_instance **tui)
 		case KEY_F(12):
 			set_label((*tui)->msg_wnd, "Messages",
 				COLOR_PAIR(C_WINDOW));
+			// Return to the initial position
+			wscrl(messages, position);
 			pad_refresh(*tui);
 			return key;
 		case KEY_RESIZE:
@@ -346,8 +352,23 @@ int msg_handler(tui_instance **tui)
 			set_label((*tui)->msg_wnd, "Messages",
 				COLOR_PAIR(C_SELECT));
 			break;
+		case KEY_UP:
+			if (position > 0) {
+				wscrl(messages, 1);
+				pad_refresh(*tui);
+				position--;
+			}
+			break;
+		case KEY_DOWN:
+			if (position < PADROWS) {
+				wscrl(messages, -1);
+				pad_refresh(*tui);
+				position++;
+			}
+			break;
 		}
 	}
+	return key;
 }
 
 void init_curses(void)
