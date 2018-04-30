@@ -6,6 +6,12 @@
 
 #define C_WINDOW 1
 #define C_SELECT 2
+#define C_NICKBLACK	  3
+#define C_NICKRED	  4
+#define C_NICKGREEN	  5
+#define C_NICKYELLOW  6
+#define C_NICKMAGENTA 7
+#define C_NICKCYAN	  8
 
 #define HDL_ERR_LOGGED(statement, error, message, code) \
 do { \

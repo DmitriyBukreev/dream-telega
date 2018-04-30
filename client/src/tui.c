@@ -158,23 +158,41 @@ void pad_refresh(tui_instance *tui)
 	prefresh(pad, PADROWS/2-max_y, 0, beg_y, beg_x, max_y, max_x);
 }
 
-void print_msg(tui_instance *tui, char *msg)
+void print_msg(tui_instance *tui, time_t raw_time,
+	char *nickname, int attrs, char *msg)
 {
+	// Area of printing
 	WINDOW *pad = (WINDOW *)panel_userptr(tui->msg_wnd->panel);
+	// Variables to calculate number of rows to scroll
 	int length;
 	int rows;
 	int max_x, max_y;
+	// Structured time
+	struct tm struct_time;
+	// Formatted timestamp
+	char format_time[32];
+
+	// Getting hours, minutes, seconds
+	raw_time = time(NULL);
+	localtime_r(&raw_time, &struct_time);
+	sprintf(format_time, "[%02i:%02i:%02i] ",
+		struct_time.tm_hour, struct_time.tm_min, struct_time.tm_sec);
 
 	// Getting number of rows in message window
-	length = strlen(msg);
+	length = strlen(msg) + strlen(format_time) + strlen(nickname) + 3;
 	getmaxyx(tui->msg_wnd->content, max_y, max_x);
 	rows = ceil((float)length/max_x);
 
-	// TODO: fancy printing to msg_wnd
-	HDL_ERR_LOGGED(mvwaddstr(pad, PADROWS/2-1, 0, msg),
-		ERR, "waddstr() failed", ERR);
-	wscrl(pad, rows);
+	// Printing routines
+	mvwaddstr(pad, PADROWS/2-1, 0, format_time);
+	wattron(pad, attrs);
+	waddstr(pad, nickname);
+	wattroff(pad, attrs);
+	waddstr(pad, ": ");
+	waddstr(pad, msg);
 
+	// Scrolling pad upwards and outputting
+	wscrl(pad, rows);
 	pad_refresh(tui);
 }
 
@@ -220,11 +238,7 @@ int tboxmove(WINDOW *tbox, const char *buf, char dir, int *pos, const int max)
 
 void redraw_interface(tui_instance **tui)
 {
-	// Re-entering curses mode
-	endwin();
-	refresh();
 	// Removing old interface
-	clear();
 	free_interface(*tui);
 	// Making new one
 	*tui = make_interface();
@@ -304,7 +318,9 @@ int input_handler(tui_instance **tui)
 		case '\n':
 			buf[len] = 0;
 
-			print_msg(*tui, buf);
+			// TODO: settings of nickname, color, etc.
+			print_msg(*tui, time(NULL), "TEST_NICKNAME",
+				COLOR_PAIR(C_NICKRED), buf);
 			HDL_ERR_LOGGED(werase(textbox),
 				ERR, "werase() failed", ERR);
 
@@ -398,4 +414,11 @@ void init_curses(void)
 		"The color table cannot be allocated", ERR);
 	init_pair(C_WINDOW, COLOR_BLACK, COLOR_WHITE);
 	init_pair(C_SELECT, COLOR_WHITE, COLOR_BLACK);
+
+	init_pair(C_NICKBLACK,		COLOR_BLACK,	COLOR_WHITE);
+	init_pair(C_NICKRED,		COLOR_RED,		COLOR_WHITE);
+	init_pair(C_NICKGREEN,		COLOR_GREEN,	COLOR_WHITE);
+	init_pair(C_NICKYELLOW,		COLOR_YELLOW,	COLOR_WHITE);
+	init_pair(C_NICKMAGENTA,	COLOR_MAGENTA,	COLOR_WHITE);
+	init_pair(C_NICKCYAN,		COLOR_CYAN,		COLOR_WHITE);
 }
