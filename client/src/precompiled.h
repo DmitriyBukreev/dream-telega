@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <math.h>
 #include <menu.h>
 #include <ncurses.h>
 #include <panel.h>

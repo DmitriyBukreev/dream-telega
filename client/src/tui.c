@@ -124,7 +124,6 @@ tui_instance *make_interface(void)
 	msg_pad = newpad(PADROWS, vertical_sep-2);
 	// Initial settings of pad
 	wbkgd(msg_pad, COLOR_PAIR(C_WINDOW));
-	wmove(msg_pad, PADROWS-horizontal_sep+1, 0);
 	scrollok(msg_pad, TRUE);
 	keypad(msg_pad, TRUE);
 	set_panel_userptr(res_tui->msg_wnd->panel, msg_pad);
@@ -156,16 +155,25 @@ void pad_refresh(tui_instance *tui)
 	max_x += beg_x;
 	max_y += beg_y-1;
 
-	prefresh(pad, PADROWS-max_y, 0, beg_y, beg_x, max_y, max_x);
+	prefresh(pad, PADROWS/2-max_y, 0, beg_y, beg_x, max_y, max_x);
 }
 
 void print_msg(tui_instance *tui, char *msg)
 {
 	WINDOW *pad = (WINDOW *)panel_userptr(tui->msg_wnd->panel);
+	int length;
+	int rows;
+	int max_x, max_y;
+
+	// Getting number of rows in message window
+	length = strlen(msg);
+	getmaxyx(tui->msg_wnd->content, max_y, max_x);
+	rows = ceil((float)length/max_x);
 
 	// TODO: fancy printing to msg_wnd
-	HDL_ERR_LOGGED(waddstr(pad, msg),
+	HDL_ERR_LOGGED(mvwaddstr(pad, PADROWS/2-1, 0, msg),
 		ERR, "waddstr() failed", ERR);
+	wscrl(pad, rows);
 
 	pad_refresh(tui);
 }
@@ -274,13 +282,15 @@ int input_handler(tui_instance **tui)
 			break;
 
 		case KEY_BACKSPACE:
-			if (buf_pos < len)
+			if (len > 0) {
+				if (buf_pos < len)
 				// Removing character in the middle of line
-				memmove(buf+buf_pos, buf+buf_pos+1,
-					len-buf_pos);
-			tboxmove(textbox, buf, -1, &buf_pos, len);
-			wdelch(textbox);
-			len--;
+					memmove(buf+buf_pos-1, buf+buf_pos,
+						len-buf_pos);
+				tboxmove(textbox, buf, -1, &buf_pos, len);
+				wdelch(textbox);
+				len--;
+			}
 			break;
 
 		case KEY_LEFT:
@@ -292,8 +302,7 @@ int input_handler(tui_instance **tui)
 			break;
 
 		case '\n':
-			buf[len] = '\n';
-			buf[len+1] = 0;
+			buf[len] = 0;
 
 			print_msg(*tui, buf);
 			HDL_ERR_LOGGED(werase(textbox),
@@ -305,8 +314,8 @@ int input_handler(tui_instance **tui)
 			break;
 
 		default:
-			// 2 charecters for '\n' and 0 in the end of the buffer
-			if (len < IN_BUF_SIZE - 2) {
+			// Last character for 0
+			if (len < IN_BUF_SIZE - 1) {
 				if (buf_pos < len) {
 					// Adding character in the middle
 					memmove(buf+buf_pos+1, buf+buf_pos,
@@ -360,7 +369,7 @@ int msg_handler(tui_instance **tui)
 			}
 			break;
 		case KEY_DOWN:
-			if (position < PADROWS) {
+			if (position < PADROWS/2) {
 				wscrl(messages, -1);
 				pad_refresh(*tui);
 				position++;
