@@ -1,7 +1,7 @@
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:src/%.c=obj/%.o)
-CFLAGS = -fsanitize=address -include src/precompiled.h -c
-LDFLAGS = -fsanitize=address -o
+CFLAGS = -fsanitize=address -g -include src/precompiled.h -c
+LDFLAGS = -fsanitize=address -g -o
 LIBS = -lpanel -lmenu -lncurses -lm
 
 all: dirs dt-client

@@ -247,6 +247,9 @@ void redraw_interface(tui_instance **tui)
 #define IN_BUF_SIZE 256
 int input_handler(tui_instance **tui)
 {
+	// Variables for saving and restoring messages
+	fifo_element_instance *element;
+	message_data_instance message;
 	// Getting pointer to textbox
 	WINDOW *textbox = (*tui)->input_wnd->content;
 	// Key to handle
@@ -290,6 +293,15 @@ int input_handler(tui_instance **tui)
 			// Reprinting buffer to textbox
 			buf[len] = 0;
 			waddstr(textbox, buf);
+			// Restoring messages from history
+			// element = history.head;
+			// while (element != NULL) {
+			//	message = *(element->data);
+			//	print_msg(*tui, message.timestamp,
+			//	message.nickname, message.attrs,
+			//	message.text);
+			//	element = element->next;
+			// }
 			// Restoring label attributes
 			set_label((*tui)->input_wnd, "Input",
 				COLOR_PAIR(C_SELECT));
@@ -319,8 +331,13 @@ int input_handler(tui_instance **tui)
 			buf[len] = 0;
 
 			// TODO: settings of nickname, color, etc.
-			print_msg(*tui, time(NULL), "TEST_NICKNAME",
-				COLOR_PAIR(C_NICKRED), buf);
+			message.timestamp = time(NULL);
+			message.nickname = "TEST_NICKNAME";
+			message.attrs = COLOR_PAIR(C_NICKRED);
+			message.text = buf;
+			fifo_push(&history, &message);
+			print_msg(*tui, message.timestamp, message.nickname,
+				message.attrs, message.text);
 			HDL_ERR_LOGGED(werase(textbox),
 				ERR, "werase() failed", ERR);
 
