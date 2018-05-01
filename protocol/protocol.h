@@ -25,7 +25,8 @@
 #define TEXT_SIZE 257
 //256 символов и 0
 
-struct message {char text[TEXT_SIZE]; char continues;};
+struct message {char text[TEXT_SIZE]; long time; char continues;};
+//Текст и время - ничего лишнего
 //Большое сообщение можно передать за
 //Несколько раз. Continues == 1 значит
 //Продолжение есть
@@ -33,10 +34,10 @@ struct message {char text[TEXT_SIZE]; char continues;};
 struct client_info {char name[TEXT_SIZE];};
 //Информация о клиенте
 
-struct topics {int index; char topic[TEXT_SIZE]; char next;};
+struct topics {int index; char topic[TEXT_SIZE]; struct client_info starter;};
 //Список передается поэлементно
 
-struct incoming_msg {struct client_info auth; char text[TEXT_SIZE]; char last;};
+struct incoming_msg {struct client_info author; struct message msg;};
 //То, что сервер отправляет участникам топика
 
 

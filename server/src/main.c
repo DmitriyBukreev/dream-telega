@@ -1,21 +1,24 @@
-struct topic_list {struct topic_list *prev;
-	struct topic_list *next;
-	int index;
-	char topic[TEXT_SIZE];
-	sem_t sem;
-};
 
 struct msg_list {struct msg_list *prev;
 	struct msg_list *next;
 	struct client_info author;
-	char text[TEXT_SIZE];
+	struct message msg;
+};
+
+struct topic_list {struct topic_list *prev;
+	struct topic_list *next;
+	struct topics topic;
+	struct msg_list *first;
+	sem_t sem;
 };
 
 struct clients_list {struct clients_list *prev;
 	struct clients_list *next;
 	struct client_info client;
 	struct topic_list topic;
+	struct msg_list *last;
 	char exited;
+	//Закончил сеанс, надо убрать
 	pthread_t thread;
 };
 
