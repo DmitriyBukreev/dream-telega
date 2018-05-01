@@ -7,7 +7,7 @@ LIBS = -lpthread -D_REENTRANT
 all: dirs dt-server
 
 dirs:
-	@mkdir -p obj bin
+	@mkdir -p obj bin bin/topics
 
 clean:
 	rm -rf obj precompiled.h.pch

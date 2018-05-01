@@ -10,6 +10,10 @@
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <stdbool.h>
+#include <dirent.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "protocol.h"
 
 #ifndef IF_ERR
