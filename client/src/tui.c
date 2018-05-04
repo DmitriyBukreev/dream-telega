@@ -21,7 +21,8 @@ wnd_instance *make_window(int y, int x, int height, int width, char *label)
 
 	if (wnd == NULL)
 		return NULL;
-	// Making sure all pointes initialized with NULL
+
+	// Making sure all pointers are initialized with NULL
 	wnd->box = NULL;
 	wnd->content = NULL;
 	wnd->panel = NULL;
@@ -63,6 +64,89 @@ wnd_instance *make_window(int y, int x, int height, int width, char *label)
 	return wnd;
 }
 
+void delete_menu(menu_instance *del_menu)
+{
+	ITEM **del_items;
+	ITEM **iter;
+
+	if (del_menu == NULL)
+		return;
+	if (del_menu->background != NULL)
+		delwin(del_menu->background);
+	if (del_menu->panel != NULL)
+		del_panel(del_menu->panel);
+	if (del_menu->menu != NULL) {
+		del_items = iter = menu_items(del_menu->menu);
+		while (*iter != NULL) {
+			free_item(*iter);
+			iter++;
+		}
+		free_menu(del_menu->menu);
+		free(del_items);
+	}
+	free(del_menu);
+}
+
+menu_instance *make_menu(int y, int x, int height, int width, char **opts,
+	int opts_num)
+{
+	// Pointer to return
+	menu_instance *res_menu;
+	// Items to initialize the menu
+	ITEM **items;
+
+	res_menu = malloc(sizeof(menu_instance));
+	if (res_menu == NULL)
+		return NULL;
+
+	// Making sure all pointers are intialized with NULL
+	res_menu->background = NULL;
+	res_menu->panel = NULL;
+	res_menu->menu = NULL;
+
+	// Making window to post the menu to
+	res_menu->background = newwin(height, width, y, x);
+	if (res_menu->background == NULL) {
+		delete_menu(res_menu);
+		return NULL;
+	}
+	wbkgd(res_menu->background, COLOR_PAIR(C_WINDOW));
+	keypad(res_menu->background, TRUE);
+
+	// Making panel connected to the window
+	res_menu->panel = new_panel(res_menu->background);
+	if (res_menu->panel == NULL) {
+		delete_menu(res_menu);
+		return NULL;
+	}
+
+	// Initializing menu
+	items = malloc(sizeof(ITEM *) * (opts_num + 1));
+	if (items == NULL) {
+		delete_menu(res_menu);
+		return NULL;
+	}
+	for (int i = 0; i < opts_num; i++)
+		items[i] = new_item(opts[i], "");
+	items[opts_num] = NULL;
+	res_menu->menu = new_menu(items);
+
+	// Connecting window and menu
+	set_menu_win(res_menu->menu, res_menu->background);
+
+	// Changing default settings of menu
+	set_menu_format(res_menu->menu, 1, opts_num);
+	set_menu_mark(res_menu->menu, "");
+	set_menu_fore(res_menu->menu, COLOR_PAIR(C_WINDOW));
+	set_menu_back(res_menu->menu, COLOR_PAIR(C_WINDOW));
+
+	// Outputing the result
+	post_menu(res_menu->menu);
+	update_panels();
+	doupdate();
+	return res_menu;
+}
+
 void free_interface(tui_instance *tui)
 {
 	if (tui == NULL)
@@ -73,8 +157,10 @@ void free_interface(tui_instance *tui)
 	}
 	if (tui->users_wnd != NULL)
 		free_window(tui->users_wnd);
-	if (tui->input_wnd)
+	if (tui->input_wnd != NULL)
 		free_window(tui->input_wnd);
+	if (tui->main_menu != NULL)
+		delete_menu(tui->main_menu);
 	free(tui);
 }
 
@@ -83,7 +169,14 @@ tui_instance *make_interface(void)
 {
 	// Structure to return
 	tui_instance *res_tui;
+	// User pointers
+	// res_tui->msg_window->panel
 	WINDOW *msg_pad;
+
+	// Main menu options
+	char *options[6] = {
+		"One", "Two", "Three", "Four", "Five", "Six"
+	};
 
 	res_tui = malloc(sizeof(tui_instance));
 	if (res_tui == NULL)
@@ -97,6 +190,13 @@ tui_instance *make_interface(void)
 	getmaxyx(stdscr, scr_max_y, scr_max_x);
 	vertical_sep = 0.7 * scr_max_x;
 	horizontal_sep = 0.7 * scr_max_y;
+
+	// Making main menu
+	res_tui->main_menu = make_menu(0, 0, 1, scr_max_x, options, 6);
+	if (res_tui->main_menu == NULL) {
+		free_interface(res_tui);
+		return NULL;
+	}
 
 	// Making windows
 	res_tui->msg_wnd = make_window(1, 0, horizontal_sep,
@@ -237,10 +337,21 @@ int tboxmove(WINDOW *tbox, const char *buf, char dir, int *pos, const int max)
 
 void redraw_interface(tui_instance **tui)
 {
+	// Message to restore
+	message_instance *message;
+
 	// Removing old interface
 	free_interface(*tui);
 	// Making new one
 	*tui = make_interface();
+	// Restoring messages from history
+	message = history.head;
+	while (message != NULL) {
+		print_msg(*tui, message->timestamp,
+		message->nickname, message->attrs,
+		message->text);
+		message = message->next;
+	}
 }
 
 #define IN_BUF_SIZE 256
@@ -291,14 +402,6 @@ int input_handler(tui_instance **tui)
 			// Reprinting buffer to textbox
 			buf[len] = 0;
 			waddstr(textbox, buf);
-			// Restoring messages from history
-			message = history.head;
-			while (message != NULL) {
-				print_msg(*tui, message->timestamp,
-				message->nickname, message->attrs,
-				message->text);
-				message = message->next;
-			}
 			// Restoring label attributes
 			set_label((*tui)->input_wnd, "Input",
 				COLOR_PAIR(C_SELECT));
@@ -329,7 +432,7 @@ int input_handler(tui_instance **tui)
 
 			// TODO: settings of nickname, color, etc.
 			message = fifo_push(&history, time(NULL),
-				"", COLOR_PAIR(C_NICKRED), buf);
+				"TEST_NICKNAME", COLOR_PAIR(C_NICKRED), buf);
 			print_msg(*tui, message->timestamp, message->nickname,
 				message->attrs, message->text);
 			HDL_ERR_LOGGED(werase(textbox),
@@ -366,7 +469,6 @@ int input_handler(tui_instance **tui)
 
 int msg_handler(tui_instance **tui)
 {
-	message_instance *message;
 	WINDOW *messages = (WINDOW *)panel_userptr((*tui)->msg_wnd->panel);
 	int key;
 	int position;
@@ -388,13 +490,7 @@ int msg_handler(tui_instance **tui)
 			redraw_interface(tui);
 			set_label((*tui)->msg_wnd, "Messages",
 				COLOR_PAIR(C_SELECT));
-			message = history.head;
-			while (message != NULL) {
-				print_msg(*tui, message->timestamp,
-				message->nickname, message->attrs,
-				message->text);
-				message = message->next;
-			}
+			pad_refresh(*tui);
 			break;
 		case KEY_UP:
 			if (position > 0) {
@@ -415,6 +511,40 @@ int msg_handler(tui_instance **tui)
 	return key;
 }
 
+int menu_handler(tui_instance **tui)
+{
+	MENU *menu = (*tui)->main_menu->menu;
+	int key;
+
+	// Displaying selection
+	set_menu_fore(menu, COLOR_PAIR(C_SELECT));
+
+	while ((key = wgetch(menu_win(menu))) != ERR) {
+		switch (key) {
+		case '\t':
+		case KEY_F(12):
+		// Removing selection
+			set_menu_fore(menu, COLOR_PAIR(C_WINDOW));
+			update_panels();
+			doupdate();
+			return key;
+		case KEY_RIGHT:
+			menu_driver(menu, REQ_RIGHT_ITEM);
+			break;
+		case KEY_LEFT:
+			menu_driver(menu, REQ_LEFT_ITEM);
+			break;
+		case KEY_RESIZE:
+			redraw_interface(tui);
+			set_menu_fore(menu, COLOR_PAIR(C_SELECT));
+			break;
+		}
+		update_panels();
+		doupdate();
+	}
+	return key;
+}
+
 void init_curses(void)
 {
 	// Regular initialization of ncurses
@@ -422,7 +552,6 @@ void init_curses(void)
 
 	// Input handling settings
 	HDL_ERR_LOGGED(cbreak(), ERR, "Cbreak() failed", ERR);
-	// HDL_ERR_LOGGED(raw(), ERR, "Raw() failed", ERR);
 	HDL_ERR_LOGGED(noecho(), ERR,
 		"Couldn't enter noecho mode", ERR);
 

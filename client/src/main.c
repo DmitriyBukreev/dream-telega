@@ -12,6 +12,9 @@ void inteface_handler(tui_instance **tui)
 		result = msg_handler(tui);
 		if (result == KEY_F(12))
 			return;
+		result = menu_handler(tui);
+		if (result == KEY_F(12))
+			return;
 	}
 }
 
