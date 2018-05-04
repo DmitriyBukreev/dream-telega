@@ -3,11 +3,11 @@
 
 #include "data.h"
 
-#define E_NOCOLOURS 304
-#define E_NOWINDOW 305
+#define E_NOCOLOURS	  304
+#define E_NOWINDOW 	  305
 
-#define C_WINDOW 1
-#define C_SELECT 2
+#define C_WINDOW	  1
+#define C_SELECT	  2
 #define C_NICKBLACK	  3
 #define C_NICKRED	  4
 #define C_NICKGREEN	  5
@@ -58,6 +58,6 @@ int msg_handler(tui_instance **tui);
 
 void init_curses(void);
 
-extern fifo_instance history;
+extern history_instance history;
 
 #endif

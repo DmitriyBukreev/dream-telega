@@ -1,30 +1,26 @@
 #ifndef CUSTOM_DATA
 #define CUSTOM_DATA
 
-#define FIFO_LENGTH 10
+#define FIFO_LENGTH 100
 
-typedef struct message_data_type {
+typedef struct message_type {
 	time_t timestamp;
 	char *nickname;
 	int attrs;
 	char *text;
-} message_data_instance;
+	struct message_type *next;
+	struct message_type *prev;
+} message_instance;
 
-typedef struct fifo_element_type {
-	message_data_instance *data;
-	struct fifo_element_type *next;
-	struct fifo_element_type *prev;
-} fifo_element_instance;
-
-typedef struct fifo_type {
-	fifo_element_instance *head;
-	fifo_element_instance *tail;
+typedef struct history_type {
+	message_instance *head;
+	message_instance *tail;
 	int total;
-} fifo_instance;
+} history_instance;
 
-fifo_element_instance *fifo_push(fifo_instance *fifo,
-	message_data_instance *data);
+message_instance *fifo_push(history_instance *history,
+	time_t timestamp, char *nickname, int attrs, char *text);
 
-void fifo_pop(fifo_instance *fifo);
+void fifo_pop(history_instance *fifo);
 
 #endif

@@ -173,7 +173,6 @@ void print_msg(tui_instance *tui, time_t raw_time,
 	char format_time[32];
 
 	// Getting hours, minutes, seconds
-	raw_time = time(NULL);
 	localtime_r(&raw_time, &struct_time);
 	sprintf(format_time, "[%02i:%02i:%02i] ",
 		struct_time.tm_hour, struct_time.tm_min, struct_time.tm_sec);
@@ -247,9 +246,8 @@ void redraw_interface(tui_instance **tui)
 #define IN_BUF_SIZE 256
 int input_handler(tui_instance **tui)
 {
-	// Variables for saving and restoring messages
-	fifo_element_instance *element;
-	message_data_instance message;
+	// Variable for restoring from history
+	message_instance *message;
 	// Getting pointer to textbox
 	WINDOW *textbox = (*tui)->input_wnd->content;
 	// Key to handle
@@ -294,14 +292,13 @@ int input_handler(tui_instance **tui)
 			buf[len] = 0;
 			waddstr(textbox, buf);
 			// Restoring messages from history
-			// element = history.head;
-			// while (element != NULL) {
-			//	message = *(element->data);
-			//	print_msg(*tui, message.timestamp,
-			//	message.nickname, message.attrs,
-			//	message.text);
-			//	element = element->next;
-			// }
+			message = history.head;
+			while (message != NULL) {
+				print_msg(*tui, message->timestamp,
+				message->nickname, message->attrs,
+				message->text);
+				message = message->next;
+			}
 			// Restoring label attributes
 			set_label((*tui)->input_wnd, "Input",
 				COLOR_PAIR(C_SELECT));
@@ -331,13 +328,10 @@ int input_handler(tui_instance **tui)
 			buf[len] = 0;
 
 			// TODO: settings of nickname, color, etc.
-			message.timestamp = time(NULL);
-			message.nickname = "TEST_NICKNAME";
-			message.attrs = COLOR_PAIR(C_NICKRED);
-			message.text = buf;
-			fifo_push(&history, &message);
-			print_msg(*tui, message.timestamp, message.nickname,
-				message.attrs, message.text);
+			message = fifo_push(&history, time(NULL),
+				"", COLOR_PAIR(C_NICKRED), buf);
+			print_msg(*tui, message->timestamp, message->nickname,
+				message->attrs, message->text);
 			HDL_ERR_LOGGED(werase(textbox),
 				ERR, "werase() failed", ERR);
 
@@ -372,6 +366,7 @@ int input_handler(tui_instance **tui)
 
 int msg_handler(tui_instance **tui)
 {
+	message_instance *message;
 	WINDOW *messages = (WINDOW *)panel_userptr((*tui)->msg_wnd->panel);
 	int key;
 	int position;
@@ -393,6 +388,13 @@ int msg_handler(tui_instance **tui)
 			redraw_interface(tui);
 			set_label((*tui)->msg_wnd, "Messages",
 				COLOR_PAIR(C_SELECT));
+			message = history.head;
+			while (message != NULL) {
+				print_msg(*tui, message->timestamp,
+				message->nickname, message->attrs,
+				message->text);
+				message = message->next;
+			}
 			break;
 		case KEY_UP:
 			if (position > 0) {

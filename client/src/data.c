@@ -1,64 +1,75 @@
 #include "data.h"
 
-fifo_instance history = { NULL, NULL, 0 };
+history_instance history = { NULL, NULL, 0 };
 
-fifo_element_instance *fifo_push(fifo_instance *fifo,
-	message_data_instance *data)
+message_instance *fifo_push(history_instance *history,
+	time_t timestamp, char *nickname, int attrs, char *text)
 {
-	// Creating new element instance
-	fifo_element_instance *element =
-		malloc(sizeof(fifo_element_instance));
-	if (element == NULL)
+	// Creating new message instance
+	message_instance *message;
+
+	message = malloc(sizeof(message_instance));
+	if (message == NULL)
 		return NULL;
 
-	// Adding data to element
-	element->data = malloc(sizeof(message_data_instance));
-	*(element->data) = *(data);
-	element->data->nickname = malloc(strlen(data->nickname));
-	strcpy(element->data->nickname, data->nickname);
-	element->data->text = malloc(strlen(data->text));
-	strcpy(element->data->text, data->text);
+	message->nickname = malloc(strlen(nickname)+1);
+	if (message->nickname == NULL) {
+		free(message);
+		return NULL;
+	}
+
+	message->text = malloc(strlen(text)+1);
+	if (message->text == NULL) {
+		free(message->nickname);
+		free(message);
+		return NULL;
+	}
+
+	// Adding data to message
+	message->timestamp = timestamp;
+	message->attrs = attrs;
+	strcpy(message->nickname, nickname);
+	strcpy(message->text, text);
 
 	// Setting pointers of element
-	element->prev = fifo->tail;
-	element->next = NULL;
+	message->prev = history->tail;
+	message->next = NULL;
 
 	// Setting pointers of descriptor
-	if (fifo->tail != NULL)
-		fifo->tail->next = element;
+	if (history->tail != NULL)
+		history->tail->next = message;
 	else
-		fifo->head = element;
-	fifo->tail = element;
+		history->head = message;
+	history->tail = message;
 
-	fifo->total += 1;
+	history->total += 1;
 
-	if (fifo->total > FIFO_LENGTH)
-		fifo_pop(fifo);
+	if (history->total > FIFO_LENGTH)
+		fifo_pop(history);
 
-	return element;
+	return message;
 }
 
-void fifo_pop(fifo_instance *fifo)
+void fifo_pop(history_instance *history)
 {
-	fifo_element_instance *element;
+	message_instance *message;
 
-	element = fifo->head;
+	message = history->head;
 	// Checking if fifo is empty
-	if (element == NULL)
+	if (message == NULL)
 		return;
 
-	// Setting pointers of fifo
-	if (element->next != NULL)
-		element->next->prev = NULL;
+	// Setting pointers of history
+	if (message->next != NULL)
+		message->next->prev = NULL;
 	else
-		fifo->tail = NULL;
-	fifo->head = element->next;
+		history->tail = NULL;
+	history->head = message->next;
 
 	// Releasing the memory
-	free(element->data->nickname);
-	free(element->data->text);
-	free(element->data);
-	free(element);
+	free(message->nickname);
+	free(message->text);
+	free(message);
 
-	fifo->total -= 1;
+	history->total -= 1;
 }
