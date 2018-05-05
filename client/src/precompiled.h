@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <locale.h>
 #include <math.h>
 #include <menu.h>
@@ -9,5 +10,4 @@
 #include <string.h>
 #include <syslog.h>
 #include <time.h>
-
-#define ARRAY_SIZE(ARRAY) sizeof(ARRAY)/sizeof(ARRAY[0])
+#include <unistd.h>

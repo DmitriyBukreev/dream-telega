@@ -1,5 +1,6 @@
 #include "precompiled.h"
 #include "tui.h"
+#include "data.h"
 
 void free_window(wnd_instance *wnd)
 {
@@ -139,6 +140,7 @@ menu_instance *make_menu(int y, int x, int height, int width, char **opts,
 	set_menu_mark(res_menu->menu, "");
 	set_menu_fore(res_menu->menu, COLOR_PAIR(C_WINDOW));
 	set_menu_back(res_menu->menu, COLOR_PAIR(C_WINDOW));
+	set_menu_spacing(res_menu->menu, 0, 0, 4);
 
 	// Outputing the result
 	post_menu(res_menu->menu);
@@ -175,7 +177,7 @@ tui_instance *make_interface(void)
 
 	// Main menu options
 	char *options[6] = {
-		"One", "Two", "Three", "Four", "Five", "Six"
+		"Settings", "Two", "Three", "Four", "Five", "Six"
 	};
 
 	res_tui = malloc(sizeof(tui_instance));
@@ -432,11 +434,10 @@ int input_handler(tui_instance **tui)
 
 			// TODO: settings of nickname, color, etc.
 			message = fifo_push(&history, time(NULL),
-				"TEST_NICKNAME", COLOR_PAIR(C_NICKRED), buf);
+				settings.nickname, settings.attrs, buf);
 			print_msg(*tui, message->timestamp, message->nickname,
 				message->attrs, message->text);
-			HDL_ERR_LOGGED(werase(textbox),
-				ERR, "werase() failed", ERR);
+			werase(textbox);
 
 			len = 0;
 			buf_pos = 0;
@@ -569,4 +570,22 @@ void init_curses(void)
 	init_pair(C_NICKYELLOW,		COLOR_YELLOW,	COLOR_WHITE);
 	init_pair(C_NICKMAGENTA,	COLOR_MAGENTA,	COLOR_WHITE);
 	init_pair(C_NICKCYAN,		COLOR_CYAN,		COLOR_WHITE);
+}
+
+void inteface_handler(tui_instance **tui)
+{
+	int result;
+
+	load_settings(&settings);
+	while (1) {
+		result = input_handler(tui);
+		if (result == KEY_F(12))
+			return;
+		result = msg_handler(tui);
+		if (result == KEY_F(12))
+			return;
+		result = menu_handler(tui);
+		if (result == KEY_F(12))
+			return;
+	}
 }

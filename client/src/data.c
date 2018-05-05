@@ -1,6 +1,10 @@
+#include "precompiled.h"
 #include "data.h"
+#include "tui.h"
 
 history_instance history = { NULL, NULL, 0 };
+
+settings_instance settings = { "DEFAULT_NAME", COLOR_PAIR(C_NICKRED) };
 
 message_instance *fifo_push(history_instance *history,
 	time_t timestamp, char *nickname, int attrs, char *text)
@@ -72,4 +76,30 @@ void fifo_pop(history_instance *history)
 	free(message);
 
 	history->total -= 1;
+}
+
+int save_settings(settings_instance *settings)
+{
+	int file;
+
+	file = creat(SETTINGS_PATH, 0666);
+	if (file == -1)
+		return -1;
+	if (write(file, settings, sizeof(settings)) == -1)
+		return -1;
+	close(file);
+}
+
+int load_settings(settings_instance *settings)
+{
+	int file;
+
+	file = open(SETTINGS_PATH, O_RDONLY);
+	if (file != -1) {
+		if (read(file, settings, sizeof(settings)) == -1)
+			return -1;
+		close(file);
+	} else
+		syslog(LOG_INFO, "Failed to open settings");
+	return 0;
 }

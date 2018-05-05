@@ -1,8 +1,6 @@
 #ifndef TUI_HEADER
 #define TUI_HEADER
 
-#include "data.h"
-
 #define E_NOCOLOURS	  304
 #define E_NOWINDOW 	  305
 
@@ -67,7 +65,5 @@ int msg_handler(tui_instance **tui);
 int menu_handler(tui_instance **tui);
 
 void init_curses(void);
-
-extern history_instance history;
 
 #endif
