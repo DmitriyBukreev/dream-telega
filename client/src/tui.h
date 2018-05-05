@@ -40,18 +40,11 @@ typedef struct wnd_type {
 	PANEL *panel;
 } wnd_instance;
 
-typedef struct menu_type
-{
-	WINDOW *background;
-	PANEL *panel;
-	MENU *menu;	
-} menu_instance;
-
 typedef struct  tui_type {
 	wnd_instance* msg_wnd;
 	wnd_instance* input_wnd;
 	wnd_instance* users_wnd;
-	menu_instance* main_menu;
+	wnd_instance* menu_wnd;
 } tui_instance;
 
 tui_instance *make_interface(void);

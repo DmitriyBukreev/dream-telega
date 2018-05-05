@@ -15,7 +15,8 @@ void free_window(wnd_instance *wnd)
 	free(wnd);
 }
 
-wnd_instance *make_window(int y, int x, int height, int width, char *label)
+wnd_instance *make_window(int y, int x, int height, int width, char *label,
+	char boxed)
 {
 	wnd_instance *wnd = malloc(sizeof(wnd_instance));
 	int wnd_max_y, wnd_max_x;
@@ -35,18 +36,19 @@ wnd_instance *make_window(int y, int x, int height, int width, char *label)
 		return NULL;
 	}
 	wbkgd(wnd->box, COLOR_PAIR(C_WINDOW));
-	box(wnd->box, 0, 0);
+	if (boxed) {
+		box(wnd->box, 0, 0);
 
-
-	// Making contents of the window
-	getmaxyx(wnd->box, wnd_max_y, wnd_max_x);
-	wnd->content = derwin(wnd->box, wnd_max_y-2, wnd_max_x-2, 1, 1);
-	if (wnd->content == NULL) {
-		free_window(wnd);
-		return NULL;
+		// Making contents of the box
+		getmaxyx(wnd->box, wnd_max_y, wnd_max_x);
+		wnd->content = derwin(wnd->box, wnd_max_y-2, wnd_max_x-2, 1, 1);
+		if (wnd->content == NULL) {
+			free_window(wnd);
+			return NULL;
+		}
+		wbkgd(wnd->box, COLOR_PAIR(C_WINDOW));
+		keypad(wnd->content, TRUE);
 	}
-	wbkgd(wnd->box, COLOR_PAIR(C_WINDOW));
-	keypad(wnd->content, TRUE);
 
 	// Adding panel
 	wnd->panel = new_panel(wnd->box);
@@ -65,87 +67,40 @@ wnd_instance *make_window(int y, int x, int height, int width, char *label)
 	return wnd;
 }
 
-void delete_menu(menu_instance *del_menu)
+void delete_menu(MENU *del_menu)
 {
 	ITEM **del_items;
 	ITEM **iter;
 
 	if (del_menu == NULL)
 		return;
-	if (del_menu->background != NULL)
-		delwin(del_menu->background);
-	if (del_menu->panel != NULL)
-		del_panel(del_menu->panel);
-	if (del_menu->menu != NULL) {
-		del_items = iter = menu_items(del_menu->menu);
-		while (*iter != NULL) {
-			free_item(*iter);
-			iter++;
-		}
-		free_menu(del_menu->menu);
-		free(del_items);
+	del_items = iter = menu_items(del_menu);
+	while (*iter != NULL) {
+		free_item(*iter);
+		iter++;
 	}
-	free(del_menu);
+	free_menu(del_menu);
+	free(del_items);
 }
 
-menu_instance *make_menu(int y, int x, int height, int width, char **opts,
-	int opts_num)
+MENU *create_menu(char **opts, int opts_num)
 {
 	// Pointer to return
-	menu_instance *res_menu;
+	MENU *res_menu;
 	// Items to initialize the menu
 	ITEM **items;
-
-	res_menu = malloc(sizeof(menu_instance));
-	if (res_menu == NULL)
-		return NULL;
-
-	// Making sure all pointers are intialized with NULL
-	res_menu->background = NULL;
-	res_menu->panel = NULL;
-	res_menu->menu = NULL;
-
-	// Making window to post the menu to
-	res_menu->background = newwin(height, width, y, x);
-	if (res_menu->background == NULL) {
-		delete_menu(res_menu);
-		return NULL;
-	}
-	wbkgd(res_menu->background, COLOR_PAIR(C_WINDOW));
-	keypad(res_menu->background, TRUE);
-
-	// Making panel connected to the window
-	res_menu->panel = new_panel(res_menu->background);
-	if (res_menu->panel == NULL) {
-		delete_menu(res_menu);
-		return NULL;
-	}
 
 	// Initializing menu
 	items = malloc(sizeof(ITEM *) * (opts_num + 1));
 	if (items == NULL) {
-		delete_menu(res_menu);
+		free_menu(res_menu);
 		return NULL;
 	}
 	for (int i = 0; i < opts_num; i++)
 		items[i] = new_item(opts[i], "");
 	items[opts_num] = NULL;
-	res_menu->menu = new_menu(items);
+	res_menu = new_menu(items);
 
-	// Connecting window and menu
-	set_menu_win(res_menu->menu, res_menu->background);
-
-	// Changing default settings of menu
-	set_menu_format(res_menu->menu, 1, opts_num);
-	set_menu_mark(res_menu->menu, "");
-	set_menu_fore(res_menu->menu, COLOR_PAIR(C_WINDOW));
-	set_menu_back(res_menu->menu, COLOR_PAIR(C_WINDOW));
-	set_menu_spacing(res_menu->menu, 0, 0, 4);
-
-	// Outputing the result
-	post_menu(res_menu->menu);
-	update_panels();
-	doupdate();
 	return res_menu;
 }
 
@@ -161,12 +116,15 @@ void free_interface(tui_instance *tui)
 		free_window(tui->users_wnd);
 	if (tui->input_wnd != NULL)
 		free_window(tui->input_wnd);
-	if (tui->main_menu != NULL)
-		delete_menu(tui->main_menu);
+	if (tui->menu_wnd != NULL) {
+		delete_menu((MENU *)panel_userptr(tui->menu_wnd->panel));
+		free_window(tui->menu_wnd);
+	}
 	free(tui);
 }
 
 #define PADROWS 1024
+#define OPTS_NUM 6
 tui_instance *make_interface(void)
 {
 	// Structure to return
@@ -174,9 +132,10 @@ tui_instance *make_interface(void)
 	// User pointers
 	// res_tui->msg_window->panel
 	WINDOW *msg_pad;
+	MENU *main_menu;
 
 	// Main menu options
-	char *options[6] = {
+	char *options[OPTS_NUM] = {
 		"Settings", "Two", "Three", "Four", "Five", "Six"
 	};
 
@@ -193,30 +152,49 @@ tui_instance *make_interface(void)
 	vertical_sep = 0.7 * scr_max_x;
 	horizontal_sep = 0.7 * scr_max_y;
 
-	// Making main menu
-	res_tui->main_menu = make_menu(0, 0, 1, scr_max_x, options, 6);
-	if (res_tui->main_menu == NULL) {
+	// Making window for main menu
+	res_tui->menu_wnd = make_window(0, 0, 1, scr_max_x, "", FALSE);
+	if (res_tui->menu_wnd == NULL) {
 		free_interface(res_tui);
 		return NULL;
 	}
+	keypad(res_tui->menu_wnd->box, TRUE);
+	// Making menu
+	main_menu = create_menu(options, OPTS_NUM);
+	if (main_menu == NULL) {
+		free_interface(res_tui);
+		return NULL;
+	}
+	// Changing default settings of menu
+	set_menu_format(main_menu, 1, OPTS_NUM);
+	set_menu_mark(main_menu, "");
+	set_menu_fore(main_menu, COLOR_PAIR(C_WINDOW));
+	set_menu_back(main_menu, COLOR_PAIR(C_WINDOW));
+	set_menu_spacing(main_menu, 0, 0, 4);
+	set_menu_win(main_menu, res_tui->menu_wnd->box);
+	// Outputing the result
+	post_menu(main_menu);
+	update_panels();
+	doupdate();
+	// Saving pointer
+	set_panel_userptr(res_tui->menu_wnd->panel, main_menu);
 
 	// Making windows
 	res_tui->msg_wnd = make_window(1, 0, horizontal_sep,
-		vertical_sep, "Messages");
+		vertical_sep, "Messages", TRUE);
 	if (res_tui->msg_wnd == NULL) {
 		free_interface(res_tui);
 		return NULL;
 	}
 
 	res_tui->users_wnd = make_window(1, vertical_sep, horizontal_sep,
-		scr_max_x-vertical_sep, "Users list");
+		scr_max_x-vertical_sep, "Users list", TRUE);
 	if (res_tui->users_wnd == NULL) {
 		free_interface(res_tui);
 		return NULL;
 	}
-
 	res_tui->input_wnd = make_window(horizontal_sep+1, 0,
-		scr_max_y-horizontal_sep-1, scr_max_x, "Input");
+		scr_max_y-horizontal_sep-1, scr_max_x, "Input", TRUE);
 	if (res_tui->input_wnd == NULL) {
 		free_interface(res_tui);
 		return NULL;
@@ -432,7 +410,6 @@ int input_handler(tui_instance **tui)
 		case '\n':
 			buf[len] = 0;
 
-			// TODO: settings of nickname, color, etc.
 			message = fifo_push(&history, time(NULL),
 				settings.nickname, settings.attrs, buf);
 			print_msg(*tui, message->timestamp, message->nickname,
@@ -514,7 +491,7 @@ int msg_handler(tui_instance **tui)
 
 int menu_handler(tui_instance **tui)
 {
-	MENU *menu = (*tui)->main_menu->menu;
+	MENU *menu = (MENU *)panel_userptr((*tui)->menu_wnd->panel);
 	int key;
 
 	// Displaying selection
