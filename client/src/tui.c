@@ -123,8 +123,165 @@ void free_interface(tui_instance *tui)
 	free(tui);
 }
 
+#define COLOR_OPTS_NUM 6
+void get_settings(settings_instance * settings)
+{
+	wnd_instance *main_wnd, *form_wnd, *menu_wnd;
+	int key = 0;
+	int scr_max_x, scr_max_y;
+	int height, width, y0, x0;
+	int len, pos;
+	char is_first_entry = TRUE;
+	FIELD * field[2];
+	FORM *form;
+	MENU *menu;
+	ITEM **items;
+	char *options[COLOR_OPTS_NUM] = {
+	"Black", "Red", "Green", "Yellow", "Magenta", "Cyan" };
+
+	// Making window in the middle of screen
+	getmaxyx(stdscr, scr_max_y, scr_max_x);
+	height = 13;
+	width = 36;
+	y0 = scr_max_y/2-height/2;
+	x0 = scr_max_x/2-width/2;
+	main_wnd = make_window(y0, x0, height, width, "Settings", TRUE);
+
+	// Making window for a form
+	form_wnd = make_window(y0+1, x0+1, 3, width-2, "Nickname", TRUE);
+	// Making field and form for nickname
+	field[0] = new_field(1, NAME_LENGTH, 0, 0, 0, 0);
+	field[1] = NULL;
+	set_field_back(field[0], COLOR_PAIR(C_WINDOW));
+	set_field_fore(field[0], COLOR_PAIR(settings->color));
+	set_field_buffer(field[0], 0, settings->nickname);
+	form = new_form(field);
+	set_form_sub(form, form_wnd->content);
+	post_form(form);
+
+	// Making window for a menu
+	menu_wnd = make_window(y0+4, x0+1, 8, width-2, "Color", TRUE);
+	menu = create_menu(options, COLOR_OPTS_NUM);
+	items = menu_items(menu);
+	set_menu_mark(menu, "");
+	set_menu_fore(menu, COLOR_PAIR(C_SELECT));
+	set_menu_back(menu, COLOR_PAIR(C_WINDOW));
+	set_menu_win(menu, menu_wnd->content);
+	set_current_item(menu, items[settings->color - C_NICKBLACK]);
+	post_menu(menu);
+	wrefresh(menu_wnd->content);
+
+	// Processing input
+	len = strlen(settings->nickname);
+	pos = 0;
+	do {
+		// Input from the form
+		key = wgetch(form_wnd->content);
+		while (key != ERR && key != '\n' && key != '\t') {
+			switch (key) {
+
+			case KEY_LEFT:
+			if (pos > 0) {
+				form_driver(form, REQ_PREV_CHAR);
+				pos--;
+			}
+			break;
+
+			case KEY_RIGHT:
+			if (pos < len) {
+				form_driver(form, REQ_NEXT_CHAR);
+				pos++;
+			}
+			break;
+
+			case KEY_BACKSPACE:
+			if (pos > 0) {
+				form_driver(form, REQ_DEL_PREV);
+				pos--;
+				len--;
+			}
+			break;
+
+			default:
+			if (len < NAME_LENGTH - 1) {
+				if (is_first_entry) {
+					is_first_entry = FALSE;
+					len = 0;
+				}
+				form_driver(form, key);
+				pos++;
+				len++;
+			}
+			}
+			key = wgetch(form_wnd->content);
+		}
+
+		if (key == ERR || key == '\n')
+			break;
+		// Input from the menu
+		key = wgetch(menu_wnd->content);
+		while (key != ERR && key != '\n' && key != '\t') {
+			switch (key) {
+			case KEY_UP:
+			menu_driver(menu, REQ_UP_ITEM);
+			break;
+
+			case KEY_DOWN:
+			menu_driver(menu, REQ_DOWN_ITEM);
+			break;
+			}
+			set_field_fore(field[0],
+			COLOR_PAIR(item_index(current_item(menu))
+					+ C_NICKBLACK));
+			touchwin(form_wnd->content);
+			wrefresh(form_wnd->content);
+			key = wgetch(menu_wnd->content);
+		}
+	} while (key != ERR && key != '\n');
+
+	// Getting data from the form
+	form_driver(form, REQ_NEXT_FIELD);
+	strncpy(settings->nickname, field_buffer(field[0], 0), len);
+	settings->nickname[len] = 0;
+	settings->color = item_index(current_item(menu)) + C_NICKBLACK;
+	save_settings(settings);
+
+	// Releasing memory
+	delete_menu(menu);
+	free_window(menu_wnd);
+	free_field(field[0]);
+	free_form(form);
+	free_window(form_wnd);
+	free_window(main_wnd);
+	update_panels();
+	doupdate();
+}
+
+void get_connection(settings_instance *settings)
+{
+	wnd_instance *main_wnd;
+	int key = 0;
+	int scr_max_x, scr_max_y;
+	int height, width;
+
+	// Making window in the middle of screen
+	height = 30;
+	width = 60;
+	getmaxyx(stdscr, scr_max_y, scr_max_x);
+	main_wnd = make_window(scr_max_y/2-height/2, scr_max_x/2-width/2,
+		height, width, "Connection", TRUE);
+
+	do {
+		key = wgetch(main_wnd->content);
+	} while (key != ERR && key != '\n');
+
+	free_window(main_wnd);
+	update_panels();
+	doupdate();
+}
+
 #define PADROWS 1024
-#define OPTS_NUM 6
+#define MAIN_OPTS_NUM 6
 tui_instance *make_interface(void)
 {
 	// Structure to return
@@ -135,7 +292,7 @@ tui_instance *make_interface(void)
 	MENU *main_menu;
 
 	// Main menu options
-	char *options[OPTS_NUM] = {
+	char *options[MAIN_OPTS_NUM] = {
 		"Settings", "Two", "Three", "Four", "Five", "Six"
 	};
 
@@ -160,13 +317,13 @@ tui_instance *make_interface(void)
 	}
 	keypad(res_tui->menu_wnd->box, TRUE);
 	// Making menu
-	main_menu = create_menu(options, OPTS_NUM);
+	main_menu = create_menu(options, MAIN_OPTS_NUM);
 	if (main_menu == NULL) {
 		free_interface(res_tui);
 		return NULL;
 	}
 	// Changing default settings of menu
-	set_menu_format(main_menu, 1, OPTS_NUM);
+	set_menu_format(main_menu, 1, MAIN_OPTS_NUM);
 	set_menu_mark(main_menu, "");
 	set_menu_fore(main_menu, COLOR_PAIR(C_WINDOW));
 	set_menu_back(main_menu, COLOR_PAIR(C_WINDOW));
@@ -212,6 +369,8 @@ tui_instance *make_interface(void)
 		return NULL;
 	}
 
+	get_settings(&settings);
+
 	return res_tui;
 }
 
@@ -239,7 +398,7 @@ void pad_refresh(tui_instance *tui)
 }
 
 void print_msg(tui_instance *tui, time_t raw_time,
-	char *nickname, int attrs, char *msg)
+	char *nickname, int color, char *msg)
 {
 	// Area of printing
 	WINDOW *pad = (WINDOW *)panel_userptr(tui->msg_wnd->panel);
@@ -264,9 +423,9 @@ void print_msg(tui_instance *tui, time_t raw_time,
 
 	// Printing routines
 	mvwaddstr(pad, PADROWS/2-1, 0, format_time);
-	wattron(pad, attrs);
+	wattron(pad, color);
 	waddstr(pad, nickname);
-	wattroff(pad, attrs);
+	wattroff(pad, color);
 	waddstr(pad, ": ");
 	waddstr(pad, msg);
 
@@ -328,7 +487,7 @@ void redraw_interface(tui_instance **tui)
 	message = history.head;
 	while (message != NULL) {
 		print_msg(*tui, message->timestamp,
-		message->nickname, message->attrs,
+		message->nickname, COLOR_PAIR(message->color),
 		message->text);
 		message = message->next;
 	}
@@ -411,9 +570,9 @@ int input_handler(tui_instance **tui)
 			buf[len] = 0;
 
 			message = fifo_push(&history, time(NULL),
-				settings.nickname, settings.attrs, buf);
+				settings.nickname, settings.color, buf);
 			print_msg(*tui, message->timestamp, message->nickname,
-				message->attrs, message->text);
+				COLOR_PAIR(message->color), message->text);
 			werase(textbox);
 
 			len = 0;

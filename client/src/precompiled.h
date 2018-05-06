@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <form.h>
 #include <locale.h>
 #include <math.h>
 #include <menu.h>

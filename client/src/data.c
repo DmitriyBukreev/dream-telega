@@ -4,10 +4,10 @@
 
 history_instance history = { NULL, NULL, 0 };
 
-settings_instance settings = { "DEFAULT_NAME", COLOR_PAIR(C_NICKRED) };
+settings_instance settings = { "DEFAULT_NAME", C_NICKRED };
 
 message_instance *fifo_push(history_instance *history,
-	time_t timestamp, char *nickname, int attrs, char *text)
+	time_t timestamp, char *nickname, int color, char *text)
 {
 	// Creating new message instance
 	message_instance *message;
@@ -31,7 +31,7 @@ message_instance *fifo_push(history_instance *history,
 
 	// Adding data to message
 	message->timestamp = timestamp;
-	message->attrs = attrs;
+	message->color = color;
 	strcpy(message->nickname, nickname);
 	strcpy(message->text, text);
 

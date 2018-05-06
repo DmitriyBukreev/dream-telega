@@ -8,7 +8,7 @@
 typedef struct message_type {
 	time_t timestamp;
 	char *nickname;
-	int attrs;
+	int color;
 	char *text;
 	struct message_type *next;
 	struct message_type *prev;
@@ -22,7 +22,7 @@ typedef struct history_type {
 
 typedef struct settings_type {
 	char nickname[NAME_LENGTH];
-	int attrs;
+	int color;
 } settings_instance;
 
 message_instance *fifo_push(history_instance *history,
