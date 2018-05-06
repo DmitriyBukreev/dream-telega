@@ -289,24 +289,75 @@ int get_settings(settings_instance * settings)
 	return key;
 }
 
+#define CONNECTION_HEIGHT 8
+#define CONNECTION_WIDTH 36
 int get_connection(settings_instance *settings)
 {
-	wnd_instance *main_wnd;
+	wnd_instance *main_wnd, *adress_wnd, *port_wnd;
+	FIELD * adress_field[2], *port_field[2];
+	FORM *adress_form, *port_form;
+	int adress_len, port_len;
 	int key = 0;
-	int scr_max_x, scr_max_y;
-	int height, width;
 
 	// Making window in the middle of screen
-	height = 30;
-	width = 60;
-	getmaxyx(stdscr, scr_max_y, scr_max_x);
-	main_wnd = make_window(scr_max_y/2-height/2, scr_max_x/2-width/2,
-		height, width, "Connection", TRUE);
+	main_wnd = make_window_centered(CONNECTION_HEIGHT, CONNECTION_WIDTH,
+		"Connection", TRUE);
+	// Adress input GUI
+	adress_wnd = make_window_relative(main_wnd, 0, 0,
+		3, SETTINGS_WIDTH-2, "Adress", TRUE);
+	adress_field[0] = new_field(1, ADRESS_LENGTH, 0, 0, 0, 0);
+	adress_field[1] = NULL;
+	set_field_back(adress_field[0], COLOR_PAIR(C_WINDOW));
+	set_field_fore(adress_field[0], COLOR_PAIR(C_WINDOW));
+	set_field_buffer(adress_field[0], 0, settings->adress);
+	set_field_type(adress_field[0], TYPE_IPV4);
+	adress_len = strlen(settings->adress);
+	adress_form = new_form(adress_field);
+	set_form_sub(adress_form, adress_wnd->content);
+	post_form(adress_form);
+	// Port input GUI
+	port_wnd = make_window_relative(main_wnd, 3, 0,
+		3, SETTINGS_WIDTH-2, "Port", TRUE);
+	port_field[0] = new_field(1, PORT_LENGTH, 0, 0, 0, 0);
+	port_field[1] = NULL;
+	set_field_back(port_field[0], COLOR_PAIR(C_WINDOW));
+	set_field_fore(port_field[0], COLOR_PAIR(C_WINDOW));
+	set_field_buffer(port_field[0], 0, settings->port);
+	set_field_type(port_field[0], TYPE_NUMERIC);
+	port_len = strlen(settings->port);
+	port_form = new_form(port_field);
+	set_form_sub(port_form, port_wnd->content);
+	post_form(port_form);
+	wrefresh(port_wnd->content);
 
 	do {
-		key = wgetch(main_wnd->content);
-	} while (key != ERR && key != '\n');
+		key = form_handler(adress_form, &adress_len, ADRESS_LENGTH);
+		if (BREAK_KEY(key))
+			break;
+		key = form_handler(port_form, &port_len, PORT_LENGTH);
+	} while (!BREAK_KEY(key));
 
+	if (key == '\n') {
+		// Saving settings
+		strncpy(settings->adress, field_buffer(adress_field[0], 0),
+			adress_len);
+		settings->adress[adress_len] = 0;
+		strncpy(settings->port, field_buffer(port_field[0], 0),
+			port_len);
+		settings->port[port_len] = 0;
+		save_settings(settings);
+
+		// Implement connection here
+	}
+
+	unpost_form(adress_form);
+	free_form(adress_form);
+	free_field(adress_field[0]);
+	unpost_form(port_form);
+	free_form(port_form);
+	free_field(port_field[0]);
+	free_window(adress_wnd);
+	free_window(port_wnd);
 	free_window(main_wnd);
 	update_panels();
 	doupdate();
@@ -685,8 +736,17 @@ int menu_handler(tui_instance **tui)
 	while (key = wgetch(menu_win(menu))) {
 		if (key == '\n') {
 			choice = item_index(current_item(menu));
-			if (choice == 0)
-				key = get_settings(&settings);
+			switch (choice) {
+			case 0:
+			key = get_settings(&settings);
+			break;
+			case 1:
+			key = get_connection(&settings);
+			break;
+			case 3:
+			key = KEY_F(12);
+			break;
+			}
 			pad_refresh(*tui);
 		}
 

@@ -3,8 +3,8 @@
 
 #define FIFO_LENGTH 100
 #define NAME_LENGTH 32
-#define ADRESS_LENGTH 15
-#define PORT_LENGTH 5
+#define ADRESS_LENGTH 16
+#define PORT_LENGTH 6
 #define SETTINGS_PATH "settings"
 
 typedef struct message_type {
