@@ -67,6 +67,29 @@ wnd_instance *make_window(int y, int x, int height, int width, char *label,
 	return wnd;
 }
 
+wnd_instance *make_window_centered(int height, int width,
+	char *label, char boxed)
+{
+	int scr_max_x, scr_max_y;
+
+	getmaxyx(stdscr, scr_max_y, scr_max_x);
+	return make_window(scr_max_y/2-height/2, scr_max_x/2-width/2,
+		height, width, label, boxed);
+}
+
+wnd_instance *make_window_relative(wnd_instance *orig, int y, int x,
+	int height, int width, char *label, char boxed)
+{
+	int x0, y0;
+
+	if (orig->content != NULL)
+		getbegyx(orig->content, y0, x0);
+	else
+		getbegyx(orig->box, y0, x0);
+
+	return make_window(y0+y, x0+x, height, width, label, boxed);
+}
+
 void delete_menu(MENU *del_menu)
 {
 	ITEM **del_items;
@@ -75,11 +98,12 @@ void delete_menu(MENU *del_menu)
 	if (del_menu == NULL)
 		return;
 	del_items = iter = menu_items(del_menu);
+	unpost_menu(del_menu);
+	free_menu(del_menu);
 	while (*iter != NULL) {
 		free_item(*iter);
 		iter++;
 	}
-	free_menu(del_menu);
 	free(del_items);
 }
 
@@ -123,15 +147,61 @@ void free_interface(tui_instance *tui)
 	free(tui);
 }
 
+#define BREAK_KEY(key) \
+((key) == KEY_F(12) || (key) == KEY_RESIZE || (key) == ERR || (key) == '\n')
+
+int form_handler(FORM *form, int *len, int maxlen)
+{
+	int pos, key;
+
+	pos = *len;
+	curs_set(1);
+	form_driver(form, REQ_END_FIELD);
+	while (key = wgetch(form_sub(form))) {
+		if (BREAK_KEY(key) || key == '\t') {
+			form_driver(form, REQ_VALIDATION);
+			curs_set(0);
+			return key;
+		}
+		switch (key) {
+		case KEY_LEFT:
+		if (pos > 0) {
+			form_driver(form, REQ_PREV_CHAR);
+			pos--;
+		}
+		break;
+
+		case KEY_RIGHT:
+		if (pos < (*len)) {
+			form_driver(form, REQ_NEXT_CHAR);
+			pos++;
+		}
+		break;
+
+		case KEY_BACKSPACE:
+		if (pos > 0) {
+			form_driver(form, REQ_DEL_PREV);
+			pos--;
+			(*len)--;
+		}
+		break;
+
+		default:
+		if ((*len) < maxlen - 1 && form_driver(form, key) == E_OK) {
+			pos++;
+			(*len)++;
+		}
+		}
+	}
+}
+
 #define COLOR_OPTS_NUM 6
-void get_settings(settings_instance * settings)
+#define SETTINGS_HEIGHT 13
+#define SETTINGS_WIDTH 36
+int get_settings(settings_instance * settings)
 {
 	wnd_instance *main_wnd, *form_wnd, *menu_wnd;
-	int key = 0;
-	int scr_max_x, scr_max_y;
-	int height, width, y0, x0;
-	int len, pos;
-	char is_first_entry = TRUE;
+	int key, len;
 	FIELD * field[2];
 	FORM *form;
 	MENU *menu;
@@ -140,27 +210,26 @@ void get_settings(settings_instance * settings)
 	"Black", "Red", "Green", "Yellow", "Magenta", "Cyan" };
 
 	// Making window in the middle of screen
-	getmaxyx(stdscr, scr_max_y, scr_max_x);
-	height = 13;
-	width = 36;
-	y0 = scr_max_y/2-height/2;
-	x0 = scr_max_x/2-width/2;
-	main_wnd = make_window(y0, x0, height, width, "Settings", TRUE);
-
+	main_wnd = make_window_centered(SETTINGS_HEIGHT, SETTINGS_WIDTH,
+		"Settings", TRUE);
 	// Making window for a form
-	form_wnd = make_window(y0+1, x0+1, 3, width-2, "Nickname", TRUE);
+	form_wnd = make_window_relative(main_wnd, 0, 0,
+		3, SETTINGS_WIDTH-2, "Nickname", TRUE);
 	// Making field and form for nickname
 	field[0] = new_field(1, NAME_LENGTH, 0, 0, 0, 0);
 	field[1] = NULL;
 	set_field_back(field[0], COLOR_PAIR(C_WINDOW));
 	set_field_fore(field[0], COLOR_PAIR(settings->color));
 	set_field_buffer(field[0], 0, settings->nickname);
+	set_field_type(field[0], TYPE_ALNUM);
+	len = strlen(settings->nickname);
 	form = new_form(field);
 	set_form_sub(form, form_wnd->content);
 	post_form(form);
 
 	// Making window for a menu
-	menu_wnd = make_window(y0+4, x0+1, 8, width-2, "Color", TRUE);
+	menu_wnd = make_window_relative(main_wnd, 3, 0,
+		8, SETTINGS_WIDTH-2, "Color", TRUE);
 	menu = create_menu(options, COLOR_OPTS_NUM);
 	items = menu_items(menu);
 	set_menu_mark(menu, "");
@@ -171,56 +240,15 @@ void get_settings(settings_instance * settings)
 	post_menu(menu);
 	wrefresh(menu_wnd->content);
 
-	// Processing input
-	len = strlen(settings->nickname);
-	pos = 0;
 	do {
-		// Input from the form
-		key = wgetch(form_wnd->content);
-		while (key != ERR && key != '\n' && key != '\t') {
-			switch (key) {
-
-			case KEY_LEFT:
-			if (pos > 0) {
-				form_driver(form, REQ_PREV_CHAR);
-				pos--;
-			}
+		// Processing input from a form
+		key = form_handler(form, &len, NAME_LENGTH);
+		if (BREAK_KEY(key))
 			break;
 
-			case KEY_RIGHT:
-			if (pos < len) {
-				form_driver(form, REQ_NEXT_CHAR);
-				pos++;
-			}
-			break;
-
-			case KEY_BACKSPACE:
-			if (pos > 0) {
-				form_driver(form, REQ_DEL_PREV);
-				pos--;
-				len--;
-			}
-			break;
-
-			default:
-			if (len < NAME_LENGTH - 1) {
-				if (is_first_entry) {
-					is_first_entry = FALSE;
-					len = 0;
-				}
-				form_driver(form, key);
-				pos++;
-				len++;
-			}
-			}
-			key = wgetch(form_wnd->content);
-		}
-
-		if (key == ERR || key == '\n')
-			break;
 		// Input from the menu
 		key = wgetch(menu_wnd->content);
-		while (key != ERR && key != '\n' && key != '\t') {
+		while (!BREAK_KEY(key) && key != '\t') {
 			switch (key) {
 			case KEY_UP:
 			menu_driver(menu, REQ_UP_ITEM);
@@ -237,27 +265,31 @@ void get_settings(settings_instance * settings)
 			wrefresh(form_wnd->content);
 			key = wgetch(menu_wnd->content);
 		}
-	} while (key != ERR && key != '\n');
+	} while (!BREAK_KEY(key));
 
-	// Getting data from the form
-	form_driver(form, REQ_NEXT_FIELD);
-	strncpy(settings->nickname, field_buffer(field[0], 0), len);
-	settings->nickname[len] = 0;
-	settings->color = item_index(current_item(menu)) + C_NICKBLACK;
-	save_settings(settings);
+	if (key == '\n') {
+		// Getting data from the form
+		strncpy(settings->nickname, field_buffer(field[0], 0), len);
+		settings->nickname[len] = 0;
+		// Getting data from menu
+		settings->color = item_index(current_item(menu)) + C_NICKBLACK;
+		save_settings(settings);
+	}
 
 	// Releasing memory
 	delete_menu(menu);
 	free_window(menu_wnd);
-	free_field(field[0]);
+	unpost_form(form);
 	free_form(form);
+	free_field(field[0]);
 	free_window(form_wnd);
 	free_window(main_wnd);
 	update_panels();
 	doupdate();
+	return key;
 }
 
-void get_connection(settings_instance *settings)
+int get_connection(settings_instance *settings)
 {
 	wnd_instance *main_wnd;
 	int key = 0;
@@ -281,7 +313,7 @@ void get_connection(settings_instance *settings)
 }
 
 #define PADROWS 1024
-#define MAIN_OPTS_NUM 6
+#define MAIN_OPTS_NUM 4
 tui_instance *make_interface(void)
 {
 	// Structure to return
@@ -293,7 +325,7 @@ tui_instance *make_interface(void)
 
 	// Main menu options
 	char *options[MAIN_OPTS_NUM] = {
-		"Settings", "Two", "Three", "Four", "Five", "Six"
+		"Settings", "Connection", "Rooms", "Exit"
 	};
 
 	res_tui = malloc(sizeof(tui_instance));
@@ -368,8 +400,6 @@ tui_instance *make_interface(void)
 		free_interface(res_tui);
 		return NULL;
 	}
-
-	get_settings(&settings);
 
 	return res_tui;
 }
@@ -519,11 +549,6 @@ int input_handler(tui_instance **tui)
 	while ((key = wgetch(textbox)) != ERR) {
 		switch (key) {
 
-		case KEY_UP:
-		case KEY_DOWN:
-		// Not implemented
-			break;
-
 		case '\t':
 		case KEY_F(12):
 			curs_set(0);
@@ -652,32 +677,43 @@ int menu_handler(tui_instance **tui)
 {
 	MENU *menu = (MENU *)panel_userptr((*tui)->menu_wnd->panel);
 	int key;
+	int choice;
 
 	// Displaying selection
 	set_menu_fore(menu, COLOR_PAIR(C_SELECT));
 
-	while ((key = wgetch(menu_win(menu))) != ERR) {
+	while (key = wgetch(menu_win(menu))) {
+		if (key == '\n') {
+			choice = item_index(current_item(menu));
+			if (choice == 0)
+				key = get_settings(&settings);
+			pad_refresh(*tui);
+		}
+
 		switch (key) {
+		case ERR:
 		case '\t':
 		case KEY_F(12):
 		// Removing selection
-			set_menu_fore(menu, COLOR_PAIR(C_WINDOW));
-			update_panels();
-			doupdate();
-			return key;
-		case KEY_RIGHT:
-			menu_driver(menu, REQ_RIGHT_ITEM);
-			break;
-		case KEY_LEFT:
-			menu_driver(menu, REQ_LEFT_ITEM);
-			break;
-		case KEY_RESIZE:
-			redraw_interface(tui);
-			set_menu_fore(menu, COLOR_PAIR(C_SELECT));
-			break;
-		}
+		set_menu_fore(menu, COLOR_PAIR(C_WINDOW));
 		update_panels();
 		doupdate();
+		return key;
+
+		case KEY_RIGHT:
+		menu_driver(menu, REQ_RIGHT_ITEM);
+		break;
+
+		case KEY_LEFT:
+		menu_driver(menu, REQ_LEFT_ITEM);
+		break;
+
+		case KEY_RESIZE:
+		redraw_interface(tui);
+		menu = (MENU *)panel_userptr((*tui)->menu_wnd->panel);
+		set_menu_fore(menu, COLOR_PAIR(C_SELECT));
+		break;
+		}
 	}
 	return key;
 }

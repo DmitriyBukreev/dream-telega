@@ -59,4 +59,6 @@ int menu_handler(tui_instance **tui);
 
 void init_curses(void);
 
+void inteface_handler(tui_instance **tui);
+
 #endif

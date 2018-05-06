@@ -3,6 +3,8 @@
 
 #define FIFO_LENGTH 100
 #define NAME_LENGTH 32
+#define ADRESS_LENGTH 15
+#define PORT_LENGTH 5
 #define SETTINGS_PATH "settings"
 
 typedef struct message_type {
@@ -23,6 +25,8 @@ typedef struct history_type {
 typedef struct settings_type {
 	char nickname[NAME_LENGTH];
 	int color;
+	char adress[ADRESS_LENGTH];
+	char port[PORT_LENGTH];
 } settings_instance;
 
 message_instance *fifo_push(history_instance *history,
