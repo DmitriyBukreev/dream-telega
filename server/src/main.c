@@ -2,8 +2,7 @@ struct clients_list;
 
 struct msg_list {struct msg_list *prev;
 	struct msg_list *next;
-	struct client_info author;
-	struct message msg;
+	struct msg_signed *msg;
 };
 
 struct topic_list {struct topic_list *prev;
@@ -11,8 +10,9 @@ struct topic_list {struct topic_list *prev;
 	struct topics info;
 	struct msg_list *first_msg;
 	struct clients_list *members;
-	int file;
+	int fd;
 	sem_t sem;
+	sem_t msg_sem;
 };
 
 struct clients_list {struct clients_list *prev;
@@ -27,28 +27,164 @@ struct clients_list {struct clients_list *prev;
 
 sem_t topics_list_sem;
 struct topic_list *first_topic;
-struct clients_list *no_topic;
-sem_t no_topic_sem;
+struct topic_list *no_topic;
+
+int change_topic(int needed_index, struct clients_list *client)
+//Присоединение к топику
+{
+	struct topic_list *new;
+	//Новый топик
+	struct topic_list *search = first_topic;
+	//Будем просмотривать список
+
+	IF_ERR(sem_wait(&topics_list_sem), -1, "Sem wait error", exit(errno););
+	while (true) {
+		if (search->info.index == needed_index) {
+			new = search;
+			break;
+		}
+		//Сравниваем индекс с нужным
+		if (search->next == first_topic)
+			return 1;
+		//Если вернулись в начало, а индекса
+		//нет, значит что-то не так
+		search = search->next;
+		//Идем к следующему
+	}
+	IF_ERR(sem_post(&topics_list_sem), -1, "Sem post error", exit(errno););
+	//Нашли нужный
+
+	IF_ERR(sem_wait(&client->topic->sem), -1, "Semwait err", exit(errno););
+	if (client->next == client)
+		client->topic->members = NULL;
+		//Если были там один, можно просто
+		//обнулить указатель на себя
+	else {
+		client->prev->next = client->next;
+		client->next->prev = client->prev;
+		//Если нет, связываем соседей
+	}
+	IF_ERR(sem_post(&client->topic->sem), -1, "Sempost err", exit(errno););
+	//Удалемся из старого
+
+	client->topic = new;
+	//Сменим у клиента
+
+	IF_ERR(sem_wait(&new->sem), -1, "Sem wait error", exit(errno););
+	if (new->members == NULL)
+		new->members = client;
+	else {
+		client->prev = new->members->prev;
+		client->prev->next = client;
+	}
+	new->members->prev = client;
+	client->next = new->members;
+	IF_ERR(sem_post(&new->sem), -1, "Sem wait error", exit(errno););
+	//Сунем клиента в новый список
+	return 0;
+}
+
+void msg_init(struct topic_list *topic)
+{
+	IF_ERR(lseek(topic->fd, 0, SEEK_END), -1, "Lseek error", exit(errno););
+	//Читаем последние с конца
+
+	for (int i = 0; i < 20; i++) {
+		unsigned char len, name_len, check;
+		struct msg_list *temp = malloc(sizeof(struct msg_list));
+		//Выделяем память под сообщение
+
+		IF_ERR(temp, NULL, "Malloc error", exit(errno););
+
+		//Сместимся из конца влево и
+		//прочитаем
+		check = lseek(topic->fd, 3 + sizeof(long) + sizeof(int), 1);
+		//Длина текста, длина имени, байт
+		//продолжения, цвет и время
+		IF_ERR(check, -1, "Lseek error", exit(errno););
+		if (check < (3 + sizeof(long) + sizeof(int)))
+			break;
+		//Дошли до начала
+
+		check = read(topic->fd, &len, 1);
+		//Считаем длину сообщения
+		IF_ERR(check, -1, "Read error", exit(errno););
+
+		check = read(topic->fd, &name_len, 1);
+		//Считаем длину имени отправителя
+		IF_ERR(check, -1, "Read error", exit(errno););
+
+		check = read(topic->fd, &temp->msg->msg.time, sizeof(long));
+		//Считаем время сообщения
+		IF_ERR(check, -1, "Read error", exit(errno););
+
+		check = read(topic->fd, &temp->msg->author.color, sizeof(int));
+		//Считаем цвет отправителя
+		IF_ERR(check, -1, "Read error", exit(errno););
+
+		check = read(topic->fd, &temp->msg->msg.continues, 1);
+		//Считаем байт продолжения
+		IF_ERR(check, -1, "Read error", exit(errno););
+
+		check = lseek(topic->fd, 3 + sizeof(long) + sizeof(int), 1);
+		//Вернемся обратно
+		IF_ERR(check, -1, "Lseek error", exit(errno););
+
+		len++;
+		name_len++;
+
+		check = lseek(topic->fd, len + name_len, 1);
+		//Сдвинемся к началу сообщения
+		IF_ERR(check, -1, "Lseek error", exit(errno););
+
+		check = read(topic->fd, temp->msg->msg.text, len);
+		IF_ERR(check, -1, "Read error", exit(errno););
+		temp->msg->msg.text[len] = 0;
+		//Считали текст и обнулили конец
+
+		check = read(topic->fd, temp->msg->author.name, name_len);
+		IF_ERR(check, -1, "Read error", exit(errno););
+		temp->msg->author.name[name_len] = 0;
+		//Считали имя и обнулили конец
+
+		check = lseek(topic->fd, len + name_len, 1);
+		//На следующем цикле начнем здесь
+		IF_ERR(check, -1, "Lseek error", exit(errno););
+
+		if (topic->first_msg == NULL)
+			topic->first_msg = temp;
+		else {
+			temp->prev = topic->first_msg->prev;
+			temp->prev->next = temp;
+		}
+		topic->first_msg->prev = temp;
+		temp->next = topic->first_msg;
+	}
+}
 
 void *talk_to_client(void *arg)
 {
 	struct clients_list *temp = arg;
 	char check, code;
 
-	temp->topic = NULL;
+	temp->topic = no_topic;
 	//Топика нет
 	temp->exited = false;
 	//Сеанс не закончил
-	sem_wait(&no_topic_sem);
+	IF_ERR(sem_wait(&no_topic->sem), -1, "Sem wait error", exit(errno););
 	//Приступаем к редактированию списка
-	//клинетов, не имеющих топика
+	//клиентов, не имеющих топика
 
-	temp->next = no_topic;
-	temp->prev = no_topic->prev;
-	temp->prev->next = temp;
-	no_topic->prev = temp;
+	if (no_topic->members == NULL)
+		no_topic->members = temp;
+	else {
+		temp->prev = no_topic->members->prev;
+		temp->prev->next = temp;
+	}
+	no_topic->members->prev = temp;
+	temp->next = no_topic->members;
 
-	sem_post(&no_topic_sem);
+	IF_ERR(sem_post(&no_topic->sem), -1, "Sem post error", exit(errno););
 	//Закончили редактировать
 
 	IF_ERR(read(temp->fd, &code, 1), -1, "Socket read error", exit(errno););
@@ -129,7 +265,9 @@ void initialization(void)
 
 			check = sem_init(&temp->sem, 0, 1);
 			IF_ERR(check, -1, "Sem_init error", exit(errno););
-			//Семафор, чтобы менять
+			check = sem_init(&temp->msg_sem, 0, 1);
+			IF_ERR(check, -1, "Sem_init error", exit(errno););
+			//Семафоры, чтобы менять
 			//что-то мог одновременно
 			//только один процесс
 
@@ -140,23 +278,32 @@ void initialization(void)
 			//Копируем имя из файла и
 			//добавляем нулевой байт
 
-			temp->file = open(temp->info.topic, O_RDONLY);
+			temp->fd = open(temp->info.topic, O_RDONLY);
 			//Заодно отловим лишние
 			//файлы в директории
-			IF_ERR(temp->file, -1, "Open error", exit(errno););
+			IF_ERR(temp->fd, -1, "Open error", exit(errno););
 
-			check = read(temp->file, &len, 1);
+			check = read(temp->fd, &len, 1);
 			//Считаем длину имени автора
 			IF_ERR(check, -1, "Read error", exit(errno););
 			len++;
 			//Там записано вот так
 
-			check = read(temp->file, temp->info.starter.name, len);
+			check = read(temp->fd, temp->info.starter.name, len);
 			//Читаем имя
 			IF_ERR(check, -1, "Read error", exit(errno););
 		}
 	}
-	check = sem_init(&no_topic_sem, 0, 1);
+
+	//Создадим список
+	//клиентов, у которых еще нет топика
+	no_topic->prev = NULL;
+	no_topic->next = NULL;
+	no_topic->first_msg = NULL;
+	no_topic->members = NULL;
+	//Он в списке один, сообщений нет,
+	//клиентов еще нет
+	check = sem_init(&no_topic->sem, 0, 1);
 	IF_ERR(check, -1, "Sem_init error", exit(errno););
 }
 

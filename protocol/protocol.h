@@ -32,13 +32,13 @@ struct message {char text[TEXT_SIZE]; long time; char continues;};
 //Несколько раз. Continues == 1 значит
 //Продолжение есть
 
-struct client_info {char name[TEXT_SIZE];};
+struct client_info {char name[TEXT_SIZE]; int color;};
 //Информация о клиенте
 
 struct topics {int index; char topic[TEXT_SIZE]; struct client_info starter;};
 //Список передается поэлементно
 
-struct incoming_msg {struct client_info author; struct message msg;};
+struct msg_signed {struct client_info author; struct message msg;};
 //То, что сервер отправляет участникам топика
 
 
